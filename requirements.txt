@@ -1,0 +1,14 @@
+fastapi
+uvicorn
+scikit-learn
+pandas
+numpy
+matplotlib
+joblib
+mlflow
+evidently
+boto3
+pyyaml
+python-dotenv
+pytest
+requests
