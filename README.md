@@ -351,8 +351,9 @@ README step by step (Docker Engine 29.3 with Compose v5.1; Python 3.11 and 3.12)
   0.770). The API served v2 25 s after the shifted traffic ended. On new shifted
   customers, v2 scored 0.811 ROC-AUC client-side where v1 had scored 0.772.
   All Python containers run as a non-root user.
-- **CI:** all three workflow jobs were executed locally with identical commands,
-  and the Docker end-to-end job completed in about 4.5 minutes.
+- **CI:** all three workflow jobs were executed locally with identical commands
+  on the final commit. The Docker end-to-end job, including an uncached image
+  build, completed in about 5 minutes.
 - **A bug the verification caught:** with the simulator's default 80% feedback
   rate, labeled customers turned out to be selection-biased (no two-year
   contracts). Feedback sampling reused the generator's random seed. It is fixed
