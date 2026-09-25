@@ -1,0 +1,150 @@
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "churn-mlops"
+version = "1.0.0"
+description = "End-to-end MLOps pipeline: training, experiment tracking, model registry, serving, drift monitoring and automated retraining."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Prajwal Pratap Yadav" }]
+requires-python = ">=3.11"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "boto3>=1.35",
+    "fastapi>=0.115",
+    "matplotlib>=3.9",
+    "mlflow>=3.16,<4",
+    "numpy>=2.0",
+    "pandas>=2.2",
+    "prometheus-client>=0.21",
+    "pydantic>=2.9",
+    "pyyaml>=6.0",
+    "requests>=2.32",
+    "scikit-learn>=1.6",
+    "scipy>=1.14",
+    "uvicorn[standard]>=0.32",
+]
+
+[project.optional-dependencies]
+dev = [
+    "black>=26.1",
+    "httpx2>=2.13",
+    "isort>=6.0",
+    "moto[s3]>=5.0",
+    "mypy>=1.15",
+    "pandas-stubs>=2.2",
+    "pre-commit>=4.0",
+    "pytest>=8.3",
+    "pytest-cov>=6.0",
+    "ruff>=0.9",
+    "types-PyYAML",
+    "types-requests",
+    "boto3-stubs[s3]",
+]
+
+[project.urls]
+Repository = "https://github.com/Prajwal-Pratap-Yadav/end-to-end-mlops-pipeline"
+
+[tool.setuptools.packages.find]
+include = ["src*", "app*", "monitoring*"]
+
+# ---------------------------------------------------------------- formatting
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+
+[tool.isort]
+profile = "black"
+line_length = 100
+known_first_party = ["src", "app", "monitoring"]
+
+# ------------------------------------------------------------------- linting
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["mlruns", "mlartifacts"]
+
+[tool.ruff.lint]
+# Import ordering is owned by isort; formatting by black.
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "B",   # flake8-bugbear
+    "UP",  # pyupgrade
+    "SIM", # flake8-simplify
+    "C4",  # flake8-comprehensions
+    "PT",  # flake8-pytest-style
+    "RUF", # ruff-specific rules
+    "N",   # pep8-naming
+    "D",   # pydocstyle
+    "S",   # flake8-bandit (security)
+]
+ignore = [
+    "D105", # magic methods do not need docstrings
+    "D107", # __init__ is documented on the class
+    "E501", # line length is enforced by black
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.pep8-naming]
+# Upper-case X for feature matrices is the scikit-learn convention.
+ignore-names = ["X", "X_*"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["D", "S101", "S310", "S311", "N802"]  # asserts, local HTTP, test RNG
+"scripts/**" = ["S101"]
+
+# --------------------------------------------------------------- type checks
+[tool.mypy]
+python_version = "3.11"
+files = ["src", "app", "monitoring", "scripts"]
+strict = true
+warn_unreachable = true
+pretty = true
+show_error_codes = true
+
+[[tool.mypy.overrides]]
+module = ["sklearn.*", "scipy.*", "mlflow.*", "matplotlib.*", "moto.*", "skops.*"]
+ignore_missing_imports = true
+
+# --------------------------------------------------------------------- tests
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-ra --strict-markers --strict-config"
+markers = [
+    "integration: tests that train real models against a temporary MLflow store",
+]
+filterwarnings = [
+    "error::pytest.PytestUnraisableExceptionWarning",
+    # Third-party deprecations raised inside MLflow internals, not by this code base.
+    "ignore::DeprecationWarning:mlflow.*",
+    "ignore:.*noload.*:DeprecationWarning",
+    "ignore:Starting with pandas version 4.0:FutureWarning",
+    "ignore:Starting with pandas version 4.0:DeprecationWarning",
+]
+
+[tool.coverage.run]
+source = ["src", "app", "monitoring"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+exclude_also = [
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+]

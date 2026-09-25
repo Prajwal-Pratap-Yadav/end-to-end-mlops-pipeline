@@ -1,8 +1,162 @@
-version: "3.9"
+# Full local MLOps stack:
+#   mlflow      tracking server + model registry (SQLite backend, artifacts proxied over HTTP)
+#   trainer     one-shot job: trains, registers and promotes the first champion (idempotent)
+#   api         FastAPI inference service; hot-reloads when @champion moves
+#   monitor     drift/performance monitor; retrains automatically; serves /metrics and /report
+#   prometheus  scrapes api + monitor, evaluates alert rules
+#   grafana     provisioned dashboard (anonymous read-only access)
+#   simulator   optional traffic generator:  docker compose --profile demo run --rm simulator [args]
+#
+# Usage:  docker compose up -d --build
+
+name: churn-mlops
+
+x-python-service: &python-service
+  build:
+    context: .
+  image: churn-mlops:latest
+  restart: unless-stopped
+  environment: &python-env
+    MLFLOW_TRACKING_URI: http://mlflow:5000
+    LOG_LEVEL: ${LOG_LEVEL:-INFO}
 
 services:
-  mlops-api:
-    build: .
-    container_name: mlops-api
+  mlflow:
+    <<: *python-service
+    command:
+      - mlflow
+      - server
+      - --host=0.0.0.0
+      - --port=5000
+      - --workers=1
+      - --backend-store-uri=sqlite:////mlflow/mlflow.db
+      - --artifacts-destination=/mlflow/artifacts
+      - --serve-artifacts
+      # Explicit Host-header allow-list (DNS-rebinding protection): the service name
+      # for container-to-container calls, localhost for the UI on the host.
+      - --allowed-hosts=mlflow,mlflow:5000,localhost,localhost:5000,127.0.0.1,127.0.0.1:5000
+    environment:
+      MLFLOW_DISABLE_TELEMETRY: "true"
+    ports:
+      - "5000:5000"
+    volumes:
+      - mlflow-data:/mlflow
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health', timeout=3)"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+
+  trainer:
+    <<: *python-service
+    command: ["python", "-m", "src.train", "--skip-if-champion-exists"]
+    restart: "no"
+    volumes:
+      - app-data:/app/data
+    depends_on:
+      mlflow:
+        condition: service_healthy
+
+  api:
+    <<: *python-service
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      <<: *python-env
+      MLOPS__SERVING__RELOAD_INTERVAL_SECONDS: ${MODEL_RELOAD_INTERVAL_SECONDS:-10}
+      MLOPS__SERVING__ADMIN_TOKEN: ${ADMIN_TOKEN:-}
     ports:
       - "8000:8000"
+    volumes:
+      - app-data:/app/data
+    depends_on:
+      mlflow:
+        condition: service_healthy
+      trainer:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/ready', timeout=3)"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 15s
+
+  monitor:
+    <<: *python-service
+    command: ["python", "-m", "monitoring.monitor", "--serve"]
+    environment:
+      <<: *python-env
+      MLOPS__MONITORING__INTERVAL_SECONDS: ${MONITOR_INTERVAL_SECONDS:-30}
+      MLOPS__MONITORING__RETRAIN__COOLDOWN_MINUTES: ${RETRAIN_COOLDOWN_MINUTES:-2}
+    ports:
+      - "8001:8001"
+    volumes:
+      - app-data:/app/data
+      - reports:/app/reports
+    depends_on:
+      mlflow:
+        condition: service_healthy
+      trainer:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  prometheus:
+    image: prom/prometheus:v3.5.5
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=7d
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus:/etc/prometheus:ro
+      - prometheus-data:/prometheus
+    depends_on:
+      - api
+      - monitor
+
+  grafana:
+    image: grafana/grafana:13.2.2
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/dashboards/churn-mlops.json
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_NEWS_NEWS_FEED_ENABLED: "false"
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/etc/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+
+  simulator:
+    <<: *python-service
+    profiles: ["demo"]
+    restart: "no"
+    # Extra arguments are appended, e.g.:
+    #   docker compose --profile demo run --rm simulator --n 1500 --drift-strength 0.8
+    entrypoint: ["python", "-m", "monitoring.simulate", "--api-url", "http://api:8000"]
+    command: ["--n", "1000"]
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  mlflow-data:
+  app-data:
+  reports:
+  prometheus-data:
+  grafana-data:

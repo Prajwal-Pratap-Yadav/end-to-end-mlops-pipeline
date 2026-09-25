@@ -1,0 +1,6 @@
+# Normalise line endings so shell scripts, YAML and Python behave the same on
+# Windows checkouts as inside Linux containers.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary

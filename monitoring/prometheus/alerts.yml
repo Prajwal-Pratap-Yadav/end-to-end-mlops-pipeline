@@ -1,0 +1,74 @@
+# Alert rules evaluated by Prometheus (visible at http://localhost:9090/alerts).
+# Routing to a pager/chat channel would be configured in Alertmanager.
+groups:
+  - name: churn-service
+    rules:
+      - alert: ChurnApiDown
+        expr: up{job="churn-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: Churn inference API is not being scraped
+          description: Prometheus has not reached api:8000 for more than a minute.
+
+      - alert: ChurnModelNotLoaded
+        expr: churn_api_model_loaded == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: The API has no model loaded and is returning 503
+          description: Check that the MLflow registry is reachable and that a @champion alias exists.
+
+      - alert: ChurnApiHighErrorRate
+        expr: |
+          sum(rate(churn_api_http_requests_total{status=~"5.."}[5m]))
+            / clamp_min(sum(rate(churn_api_http_requests_total[5m])), 1e-9) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: More than 5% of API requests are failing
+
+      - alert: ChurnApiHighLatency
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le) (rate(churn_api_http_request_duration_seconds_bucket{route=~"/predict.*"}[5m]))
+          ) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: p95 prediction latency is above 500 ms
+
+      - alert: ChurnPredictionLogFailing
+        expr: increase(churn_api_prediction_log_errors_total[10m]) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: Predictions are served but not logged; monitoring and retraining lose data
+
+  - name: churn-model-quality
+    rules:
+      - alert: ChurnDataDriftDetected
+        expr: churn_monitor_dataset_drift == 1
+        labels:
+          severity: warning
+        annotations:
+          summary: Production inputs have drifted from the champion's training data
+          description: "Drift share {{ $value }}; see the monitor report at http://localhost:8001/report"
+
+      - alert: ChurnLiveRocAucLow
+        expr: churn_monitor_live_metric{metric="roc_auc"} < 0.75
+        labels:
+          severity: warning
+        annotations:
+          summary: Live ROC-AUC on labeled feedback is below 0.75
+
+      - alert: ChurnMonitorStale
+        expr: time() - churn_monitor_last_run_timestamp_seconds > 600
+        labels:
+          severity: warning
+        annotations:
+          summary: The monitoring job has not completed a cycle in 10 minutes

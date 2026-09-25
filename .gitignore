@@ -1,9 +1,40 @@
+# Python
 __pycache__/
-*.pyc
-.env
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Virtual environments
 venv/
 .venv/
+
+# Environment / secrets
+.env
+
+# Tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# MLflow local stores and generated artifacts
+mlflow.db
 mlruns/
+mlartifacts/
 models/
 artifacts/
+
+# Generated data and reports (reproducible from code)
+data/
+reports/
+
+# Logs / OS / editors
 *.log
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
