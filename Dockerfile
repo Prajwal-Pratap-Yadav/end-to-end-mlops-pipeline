@@ -27,11 +27,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     LOG_FORMAT=json \
     MLFLOW_DISABLE_TELEMETRY=true \
     DO_NOT_TRACK=true \
-    PROMETHEUS_DISABLE_CREATED_SERIES=True
+    PROMETHEUS_DISABLE_CREATED_SERIES=True \
+    GIT_PYTHON_REFRESH=quiet
 
-# Unprivileged runtime user; no shell login, no home directory writes.
-RUN groupadd --system --gid 10001 app \
-    && useradd --system --uid 10001 --gid app --home-dir /app --no-create-home \
+# Unprivileged runtime user with a fixed high UID (no clash with host users) and its
+# own writable home, where libraries such as matplotlib keep their caches. No login shell.
+RUN groupadd --gid 10001 app \
+    && useradd --uid 10001 --gid app --create-home --home-dir /home/app \
        --shell /usr/sbin/nologin app
 
 WORKDIR /app
