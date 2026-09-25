@@ -5,10 +5,13 @@ manually. The procedure:
 
 1. Guard rails: retraining enabled, cooldown elapsed since the last registered
    version, a champion exists, and enough ground truth has arrived.
-2. Build datasets from the prediction log joined with feedback. The **newest**
-   ``holdout_fraction`` of labeled rows is held out - a time-based split, because
-   a random split would leak future behaviour into training. If the remaining
-   fresh rows are scarce, they are topped up with the champion's reference data.
+2. Build datasets from the prediction log joined with feedback, using only the
+   most recent ``max_fresh_rows`` labeled predictions (by default the same size as
+   the drift window) so the new model learns the *current* regime rather than a
+   blend dominated by pre-drift history. The **newest** ``holdout_fraction`` of
+   those rows is held out - a time-based split, because a random split would leak
+   future behaviour into training. Only if the remaining fresh rows fall below
+   ``min_training_rows`` are they topped up with the champion's reference data.
 3. Train through the standard pipeline (:func:`src.train.train_and_register`),
    which evaluates challenger *and* champion on the same holdout and only moves
    ``@champion`` if the challenger wins. The API picks the change up on its next poll.
@@ -42,7 +45,7 @@ from src.validation import assert_valid
 
 logger = logging.getLogger(__name__)
 
-RetrainStatus = Literal["promoted", "rejected", "skipped", "failed"]
+RetrainStatus = Literal["promoted", "rejected", "skipped", "failed", "pending"]
 
 
 @dataclass

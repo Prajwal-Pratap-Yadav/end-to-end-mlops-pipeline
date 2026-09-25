@@ -187,7 +187,10 @@ def main(argv: list[str] | None = None) -> None:
         "--drift-strength", type=float, default=0.0, help="0 = baseline, 1 = severe"
     )
     parser.add_argument(
-        "--feedback-rate", type=float, default=1.0, help="Share receiving ground truth"
+        "--feedback-rate",
+        type=float,
+        default=0.8,
+        help="Share of predictions that later receive ground truth",
     )
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument(

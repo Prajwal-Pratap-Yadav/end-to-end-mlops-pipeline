@@ -84,7 +84,7 @@ class PromotionConfig(_StrictModel):
     """Champion/challenger promotion policy."""
 
     metric: MetricName = "roc_auc"
-    min_improvement: float = 0.0
+    min_improvement: float = 0.01
     min_metrics: dict[MetricName, float] = Field(default_factory=dict)
 
 
@@ -126,10 +126,11 @@ class RetrainConfig(_StrictModel):
 
     enabled: bool = True
     min_labeled_samples: int = Field(default=500, ge=10)
-    max_fresh_rows: int = Field(default=5000, ge=10)
+    max_fresh_rows: int = Field(default=1000, ge=10)
     holdout_fraction: float = Field(default=0.25, gt=0.0, lt=1.0)
-    min_training_rows: int = Field(default=1000, ge=10)
+    min_training_rows: int = Field(default=500, ge=10)
     cooldown_minutes: float = Field(default=30.0, ge=0.0)
+    trigger_persistence_cycles: int = Field(default=2, ge=1)
 
 
 class MonitoringConfig(_StrictModel):

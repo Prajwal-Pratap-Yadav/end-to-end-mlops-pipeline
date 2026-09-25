@@ -48,7 +48,7 @@ registry:
   challenger_alias: challenger  # the most recent candidate
   promotion:
     metric: roc_auc             # champion vs challenger are compared on this metric
-    min_improvement: 0.0        # challenger must be >= champion + this margin
+    min_improvement: 0.01       # challenger must beat the champion by this margin (noise guard)
     min_metrics:                # absolute quality gate every promoted model must pass
       roc_auc: 0.75
       f1: 0.45
@@ -79,10 +79,11 @@ monitoring:
   retrain:
     enabled: true
     min_labeled_samples: 500    # need at least this much fresh ground truth to retrain
-    max_fresh_rows: 5000        # most recent labeled predictions used for retraining
+    max_fresh_rows: 1000        # retrain on the recent regime: same size as the drift window
     holdout_fraction: 0.25      # newest slice of labeled data held out for champion vs challenger
-    min_training_rows: 1000     # top up with reference data when fresh data is scarce
+    min_training_rows: 500      # top up with (older) reference data only below this size
     cooldown_minutes: 30        # minimum gap between automated retraining runs
+    trigger_persistence_cycles: 2  # a trigger must fire in N consecutive cycles (debounce)
 
 storage:
   s3:

@@ -192,8 +192,30 @@ class MonitorMetrics:
                 value = result.performance.metrics.get(name)
                 if value is not None:
                     self.live_metric.labels(name).set(value)
-        if result.retraining is not None:
+        if result.retraining is not None and result.retraining.status != "pending":
             self.retraining_runs.labels(result.retraining.status).inc()
+
+
+class TriggerGate:
+    """Debounce retraining triggers: act only after N consecutive triggered cycles.
+
+    Drift becomes detectable while a shift is still rolling out, when the window
+    is only partly post-shift. Retraining at that moment would learn mostly the
+    old regime; waiting for the trigger to persist lets post-shift data accumulate
+    (the same idea as the ``for:`` clause on a Prometheus alert).
+    """
+
+    def __init__(self, required_cycles: int) -> None:
+        self.required_cycles = max(1, required_cycles)
+        self.streak = 0
+
+    def observe(self, triggered: bool) -> bool:
+        """Record a cycle; return True when retraining should run now."""
+        self.streak = self.streak + 1 if triggered else 0
+        if self.streak >= self.required_cycles:
+            self.streak = 0
+            return True
+        return False
 
 
 def evaluate_live_performance(
@@ -255,6 +277,7 @@ def run_monitoring_cycle(
     client: MlflowClient | None = None,
     allow_retrain: bool = True,
     metrics: MonitorMetrics | None = None,
+    trigger_gate: TriggerGate | None = None,
 ) -> MonitoringResult:
     """Run one monitoring cycle.
 
@@ -264,6 +287,8 @@ def run_monitoring_cycle(
         client: MLflow client (created from the config when omitted).
         allow_retrain: Run retraining when a trigger fires.
         metrics: Prometheus gauges to update.
+        trigger_gate: Debounce for retraining triggers; ``None`` retrains on the
+            first triggered cycle (used for one-off, operator-initiated runs).
 
     Returns:
         The monitoring result (reports are written to ``monitoring.report_dir``).
@@ -312,10 +337,19 @@ def run_monitoring_cycle(
                 now, status, name, version, len(window), drift, performance, reasons
             )
             if reasons and allow_retrain:
-                result.retraining = run_retraining(
-                    config, store=store, client=client, reasons=reasons
-                )
+                if trigger_gate is None or trigger_gate.observe(True):
+                    result.retraining = run_retraining(
+                        config, store=store, client=client, reasons=reasons
+                    )
+                else:
+                    result.retraining = RetrainingOutcome(
+                        "pending",
+                        f"trigger fired in {trigger_gate.streak}/{trigger_gate.required_cycles} "
+                        "consecutive cycles; waiting for it to persist",
+                    )
                 logger.info("Retraining outcome: %s", result.retraining.to_dict())
+            elif trigger_gate is not None:
+                trigger_gate.observe(False)
 
     result.report_paths = _write_reports(result, config)
     if metrics is not None:
@@ -376,11 +410,14 @@ def start_http_server(port: int, metrics: MonitorMetrics, report_dir: Path) -> T
 def serve(config: AppConfig, allow_retrain: bool = True) -> None:
     """Run monitoring cycles forever at ``monitoring.interval_seconds``."""
     metrics = MonitorMetrics()
+    gate = TriggerGate(config.monitoring.retrain.trigger_persistence_cycles)
     start_http_server(config.monitoring.metrics_port, metrics, Path(config.monitoring.report_dir))
     while True:
         started = time.monotonic()
         try:
-            run_monitoring_cycle(config, allow_retrain=allow_retrain, metrics=metrics)
+            run_monitoring_cycle(
+                config, allow_retrain=allow_retrain, metrics=metrics, trigger_gate=gate
+            )
         except Exception:
             metrics.cycle_errors.inc()
             logger.exception("Monitoring cycle failed")

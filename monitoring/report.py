@@ -27,6 +27,12 @@ def _fmt(value: Any, digits: int = 4) -> str:
     return html.escape(str(value))
 
 
+def _fmt_p(value: Any) -> str:
+    if isinstance(value, float) and not math.isnan(value) and value < 1e-4:
+        return "&lt;0.0001"
+    return _fmt(value)
+
+
 def _summary(summary: dict[str, Any]) -> str:
     if "distribution" in summary:
         return ", ".join(f"{html.escape(k)}: {v:.0%}" for k, v in summary["distribution"].items())
@@ -57,7 +63,7 @@ def render_html(result: dict[str, Any]) -> str:
             f"<td>{html.escape(feature['kind'])}</td>"
             f'<td class="num">{_fmt(feature["psi"])}</td>'
             f"<td>{html.escape(feature['test'])}</td>"
-            f'<td class="num">{_fmt(feature["p_value"])}</td>'
+            f'<td class="num">{_fmt_p(feature["p_value"])}</td>'
             f"<td>{_summary(feature['reference'])}</td>"
             f"<td>{_summary(feature['current'])}</td>"
             f"<td>{flag}</td>"
@@ -67,7 +73,7 @@ def render_html(result: dict[str, Any]) -> str:
     prediction = drift.get("prediction_drift")
     prediction_html = (
         f"<p>Predicted churn probability PSI: <b>{_fmt(prediction['psi'])}</b> "
-        f"(KS p-value {_fmt(prediction['p_value'])}); reference {_summary(prediction['reference'])} "
+        f"(KS p-value {_fmt_p(prediction['p_value'])}); reference {_summary(prediction['reference'])} "
         f"&rarr; current {_summary(prediction['current'])}.</p>"
         if prediction
         else "<p>No prediction drift computed.</p>"
@@ -76,7 +82,8 @@ def render_html(result: dict[str, Any]) -> str:
     performance = result.get("performance") or {}
     perf_metrics = performance.get("metrics") or {}
     perf_rows = "".join(
-        f'<tr><td>{html.escape(name)}</td><td class="num">{_fmt(value)}</td></tr>'
+        f'<tr><td>{html.escape(name)}</td><td class="num">'
+        f'{int(value) if name == "n_samples" else _fmt(value)}</td></tr>'
         for name, value in sorted(perf_metrics.items())
     )
     perf_html = (
