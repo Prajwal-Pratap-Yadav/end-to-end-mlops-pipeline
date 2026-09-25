@@ -1,8 +1,10 @@
 name: CI
 
+# Pull requests and main. (Running on every branch push as well would run each PR
+# commit twice.) workflow_dispatch allows a manual run on any branch.
 on:
   push:
-    branches: ["**"]
+    branches: [main]
   pull_request:
   workflow_dispatch:
 

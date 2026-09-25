@@ -17,7 +17,7 @@ pre-commit install                 # runs isort, black, ruff and mypy on every c
 
 ## Quality gates
 
-CI runs these on every push and pull request; run them locally first:
+CI runs these on every pull request and on pushes to `main`; run them locally first:
 
 | Check | Command |
 |-------|---------|
