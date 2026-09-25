@@ -107,7 +107,10 @@ def simulate(
     """
     session = session or requests.Session()
     api_url = api_url.rstrip("/")
-    rng = np.random.default_rng(seed)
+    # Independent stream for "does this customer's outcome get reported?". Reusing
+    # ``seed`` would replay the generator's own uniforms - the ones that pick each
+    # customer's contract - and silently label only some contract types.
+    rng = np.random.default_rng([seed, 1])
     customers = generate_customers(
         n, seed=seed, drift=DriftProfile.from_strength(drift_strength), id_offset=seed * 1_000_000
     )

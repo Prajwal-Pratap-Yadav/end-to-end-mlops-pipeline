@@ -51,6 +51,63 @@ def test_payload_conversion_matches_api_contract() -> None:
     assert payload["contract_type"] in {"month_to_month", "one_year", "two_year"}
 
 
+class _Stub:
+    ok = True
+    status_code = 200
+    text = ""
+
+    def __init__(self, body: Any) -> None:
+        self._body = body
+
+    def json(self) -> Any:
+        return self._body
+
+
+class _RecordingSession:
+    """Fake API that remembers which customers received ground truth."""
+
+    def __init__(self) -> None:
+        self.contracts: dict[str, str] = {}
+        self.labeled: set[str] = set()
+
+    def post(self, url: str, json: Any, timeout: float) -> _Stub:
+        if url.endswith("/feedback"):
+            self.labeled.add(json["prediction_id"])
+            return _Stub({"status": "recorded"})
+        instances = json["instances"] if url.endswith("/batch") else [json]
+        results = []
+        for instance in instances:
+            prediction_id = f"p{len(self.contracts)}"
+            self.contracts[prediction_id] = instance["contract_type"]
+            results.append(
+                {"prediction_id": prediction_id, "churn_probability": 0.5, "model_version": "1"}
+            )
+        return _Stub({"predictions": results} if url.endswith("/batch") else results[0])
+
+
+def test_feedback_sampling_is_independent_of_customer_attributes() -> None:
+    # Regression test: feedback sampling once reused the generator's seed, so the
+    # same uniforms that assigned each contract type decided who got labeled and no
+    # two-year customer was ever labeled - biasing monitoring and retraining.
+    session = _RecordingSession()
+    simulate(
+        "http://api",
+        3000,
+        drift_strength=0.8,
+        feedback_rate=0.8,
+        seed=8,
+        batch_size=100,
+        session=session,  # type: ignore[arg-type]
+    )
+    contracts = session.contracts
+    labeled_share = len(session.labeled) / len(contracts)
+    assert abs(labeled_share - 0.8) < 0.03
+    for contract in ("month_to_month", "one_year", "two_year"):
+        overall = sum(c == contract for c in contracts.values()) / len(contracts)
+        labeled = sum(contracts[p] == contract for p in session.labeled) / len(session.labeled)
+        assert abs(labeled - overall) < 0.03, (contract, labeled, overall)
+
+
 @pytest.mark.integration
 def test_drift_triggers_retraining_and_api_hot_reloads(fresh_env: TrainedEnv) -> None:
     config = fresh_env.config
