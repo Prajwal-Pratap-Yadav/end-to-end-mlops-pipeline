@@ -105,10 +105,12 @@ to guard rails:
 
 The retrainer trains on the latest 1,000 labeled predictions, holds out the
 newest 25% and runs the standard pipeline, including the promotion gate. On the
-shifted market used in the demo, the challenger reaches ~0.82 ROC-AUC on the
-holdout against ~0.78 for the stale champion and is promoted; on unchanged data
-it cannot beat the champion by the margin and is rejected. Both cases are
-covered by tests.
+shifted market used in the demo, the challenger reaches about 0.82-0.83 ROC-AUC
+on the holdout against about 0.77-0.78 for the stale champion and is promoted.
+On unchanged data it cannot beat the champion by the margin and is rejected.
+Both cases are covered by tests.
+
+![Model registry: v2 promoted by automated retraining, with the decision evidence stored as version tags](images/mlflow-registry.png)
 
 ## 7. Roll back
 

@@ -49,7 +49,7 @@ fresh data, and the API hot-swaps v1 → v2.</sub>
 | Observability | Prometheus metrics (traffic, latency, output distribution, model version), 8 alert rules, provisioned Grafana |
 | ML monitoring | PSI drift per feature and on predictions (plus KS / χ² tests), live metrics from delayed ground truth |
 | Continuous training | Debounced triggers, cooldown, time-based holdout, champion/challenger evaluation, automatic promotion |
-| Engineering quality | 120 tests (91% branch coverage), strict mypy, ruff/black/isort, pre-commit, CI with a Docker end-to-end job |
+| Engineering quality | 121 tests (91% branch coverage), strict mypy, ruff/black/isort, pre-commit, CI with a Docker end-to-end job |
 
 ## Architecture
 
@@ -137,7 +137,8 @@ What happens next, with no manual step:
 2. Once the trigger persists for two cycles, it retrains on the latest labeled
    predictions, holding out the newest 25%.
 3. The promotion gate scores the challenger and the champion on that holdout.
-   The retrained model wins (about 0.82 vs 0.78 ROC-AUC) and `@champion` moves to v2.
+   The retrained model wins (0.827 vs 0.770 ROC-AUC in the verification run) and
+   `@champion` moves to v2.
 4. Within 10 s the API serves v2, and the monitor's next cycle reports the stack as `ok`.
 
 Follow along:
@@ -277,7 +278,7 @@ interval, monitoring cadence, admin token, Grafana credentials, optional S3).
 ## Testing and quality
 
 ```bash
-pytest --cov              # 120 tests, ~3 minutes
+pytest --cov              # 121 tests, 3-5 minutes
 mypy                      # strict type checking
 ruff check . && black --check . && isort --check-only .
 pre-commit run --all-files
@@ -331,26 +332,33 @@ model after a simulated market shift.
 ## Verified working
 
 Verified on 2026-09-25 from a fresh clone of this repository, following this
-README step by step (Docker Engine 29.3 with Compose v5.1, Python 3.11 and 3.12):
+README step by step (Docker Engine 29.3 with Compose v5.1; Python 3.11 and 3.12):
 
 - **Quality gates:** `black`, `isort`, `ruff`, strict `mypy` (26 files) and all 14
   pre-commit hooks pass. `actionlint` validates the CI workflow.
-- **Tests:** 120 passed on Python 3.11 and on 3.12, with 91% branch coverage.
+- **Tests:** 121 passed on Python 3.11 and on 3.12, with 91% branch coverage.
 - **Local path:** `python -m src.train` selected logistic regression by 5-fold CV
-  (test ROC-AUC 0.828) and promoted v1. The API served it, the simulator drove
-  normal then shifted traffic, and one monitoring cycle detected drift in
-  `monthly_charges` and `num_support_tickets`, retrained, and promoted v2
-  (0.819 vs 0.774 on the fresh holdout). The running API switched to v2 without
-  a restart.
-- **Docker path:** `docker compose up -d --build` from an empty state brought
-  every service up healthy, with the API ready about 50 s after start. The smoke
-  test passed 9/9 checks. The drift scenario above produced an automatic
-  retrain and promotion of v2 (0.816 vs 0.778), followed by an `ok` monitoring
-  status. All Python containers run as a non-root user.
-- **CI:** the three workflow jobs were executed locally with identical commands
-  (the Docker end-to-end job completed in about 4.5 minutes). The badge above
-  reflects runs on GitHub.
-- Screenshots in this README and in `docs/images/` were captured from those runs.
+  (test ROC-AUC 0.828) and promoted v1. The API served it, and the simulator sent
+  1,000 normal then 1,500 shifted customers. One monitoring cycle detected drift
+  in `monthly_charges` and `num_support_tickets` (prediction PSI 0.58),
+  retrained, and promoted v2 (0.822 vs 0.778 on the fresh holdout). The running
+  API switched to v2 within 30 s without a restart, and the next cycle reported
+  `ok` with no drifted features.
+- **Docker path:** with no project images, build cache or volumes,
+  `docker compose up -d --build` built and started every service healthy in
+  3.6 minutes, and the smoke test passed 9/9 checks. The drift scenario held the
+  first detection as pending, retrained on the second, and promoted v2 (0.827 vs
+  0.770). The API served v2 25 s after the shifted traffic ended. On new shifted
+  customers, v2 scored 0.811 ROC-AUC client-side where v1 had scored 0.772.
+  All Python containers run as a non-root user.
+- **CI:** all three workflow jobs were executed locally with identical commands,
+  and the Docker end-to-end job completed in about 4.5 minutes.
+- **A bug the verification caught:** with the simulator's default 80% feedback
+  rate, labeled customers turned out to be selection-biased (no two-year
+  contracts). Feedback sampling reused the generator's random seed. It is fixed
+  and covered by a regression test; all numbers above are from after the fix.
+- The screenshots in this README and in `docs/images/` were captured from the
+  Docker run above.
 
 ## Known limitations
 
