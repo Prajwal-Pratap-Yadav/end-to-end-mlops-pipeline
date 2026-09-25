@@ -27,7 +27,7 @@ from src.config import AppConfig, load_config
 from src.registry import configure_mlflow, get_version_by_alias
 from src.schema import ID_COLUMN, feature_names
 from src.utils import configure_logging, ensure_parent_dir, utc_now
-from src.validation import assert_valid, coerce_types
+from src.validation import assert_valid
 
 logger = logging.getLogger(__name__)
 
@@ -52,9 +52,12 @@ class LoadedModel:
     training_metrics: dict[str, float] = field(default_factory=dict)
 
     def predict_proba(self, frame: pd.DataFrame) -> np.ndarray:
-        """Return churn probabilities for raw feature rows."""
-        X = coerce_types(frame[feature_names()])
-        return np.asarray(self.model.predict_proba(X)[:, 1], dtype=float)
+        """Return churn probabilities for raw feature rows.
+
+        Type coercion happens inside the pipeline's first step, so only the contract
+        columns are selected here.
+        """
+        return np.asarray(self.model.predict_proba(frame[feature_names()])[:, 1], dtype=float)
 
     def describe(self) -> dict[str, Any]:
         """Metadata suitable for API responses and logs."""

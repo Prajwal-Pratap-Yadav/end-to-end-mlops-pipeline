@@ -203,11 +203,17 @@ def coerce_types(frame: pd.DataFrame) -> pd.DataFrame:
     data came from a CSV, the synthetic generator, the API or the prediction log.
     """
     result = frame.copy()
+    numeric = [s.name for s in FEATURES if s.kind != "categorical" and s.name in result.columns]
+    if numeric:
+        # Vectorised fast path (this runs on every online prediction); fall back to
+        # element-wise coercion only when some value is not parseable as a number.
+        try:
+            result[numeric] = result[numeric].astype(float)
+        except (TypeError, ValueError):
+            result[numeric] = result[numeric].apply(pd.to_numeric, errors="coerce").astype(float)
     for spec in FEATURES:
-        if spec.name not in result.columns:
-            continue
-        if spec.kind in ("numeric", "binary"):
-            result[spec.name] = pd.to_numeric(result[spec.name], errors="coerce").astype(float)
-        else:
-            result[spec.name] = result[spec.name].astype(object).where(result[spec.name].notna())
+        if spec.kind == "categorical" and spec.name in result.columns:
+            column = result[spec.name]
+            if column.dtype != object:
+                result[spec.name] = column.astype(object).where(column.notna())
     return result
