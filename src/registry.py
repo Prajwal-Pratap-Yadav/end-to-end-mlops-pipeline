@@ -42,10 +42,16 @@ DECISION_REJECTED = "rejected"
 
 
 def configure_mlflow(config: AppConfig) -> MlflowClient:
-    """Point the MLflow fluent API at the configured store and return a client."""
-    mlflow.set_tracking_uri(config.mlflow.tracking_uri)
-    mlflow.set_registry_uri(config.mlflow.tracking_uri)
-    return MlflowClient(tracking_uri=config.mlflow.tracking_uri)
+    """Point the MLflow fluent API at the configured store and return a client.
+
+    The registry URI is passed explicitly: a client built from a tracking URI alone
+    silently falls back to the process-wide registry URI, which may belong to a
+    different store.
+    """
+    uri = config.mlflow.tracking_uri
+    mlflow.set_tracking_uri(uri)
+    mlflow.set_registry_uri(uri)
+    return MlflowClient(tracking_uri=uri, registry_uri=uri)
 
 
 def get_version_by_alias(client: MlflowClient, name: str, alias: str) -> ModelVersion | None:
@@ -197,11 +203,11 @@ def set_alias(client: MlflowClient, name: str, alias: str, version: str) -> None
     logger.info("Alias %s@%s -> version %s", name, alias, version)
 
 
-def rollback(client: MlflowClient, name: str, alias: str) -> ModelVersion:
+def rollback(client: MlflowClient, name: str, alias: str) -> str:
     """Move the champion alias back to the previously promoted version.
 
     Returns:
-        The version the alias now points to.
+        The version number the alias now points to.
 
     Raises:
         RuntimeError: If there is no champion or no earlier promoted version.
@@ -216,9 +222,9 @@ def rollback(client: MlflowClient, name: str, alias: str) -> ModelVersion:
     ]
     if not candidates:
         raise RuntimeError(f"No previously promoted version older than v{current.version}")
-    target = candidates[0]
-    set_alias(client, name, alias, target.version)
-    client.set_model_version_tag(name, current.version, "rollback.replaced_by", target.version)
+    target = str(candidates[0].version)
+    set_alias(client, name, alias, target)
+    client.set_model_version_tag(name, str(current.version), "rollback.replaced_by", target)
     return target
 
 
@@ -245,7 +251,7 @@ def describe_versions(client: MlflowClient, name: str) -> list[dict[str, Any]]:
     aliases = aliases_by_version(client, name)
     return [
         {
-            "version": v.version,
+            "version": str(v.version),
             "aliases": sorted(aliases.get(str(v.version), [])),
             "run_id": v.run_id,
             "status": v.status,
@@ -289,7 +295,7 @@ def main(argv: list[str] | None = None) -> None:
         print(f"{name}@{alias} -> v{args.version}")
     elif args.command == "rollback":
         target = rollback(client, name, alias)
-        print(f"{name}@{alias} -> v{target.version}")
+        print(f"{name}@{alias} -> v{target}")
 
 
 if __name__ == "__main__":
