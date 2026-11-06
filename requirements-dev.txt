@@ -231,7 +231,7 @@ opentelemetry-proto==1.45.0
     # via
     #   mlflow-skinny
     #   mlflow-tracing
-opentelemetry-sdk==1.45.0
+opentelemetry-sdk==1.45.2
     # via
     #   mlflow-skinny
     #   mlflow-tracing
