@@ -134,7 +134,7 @@ httpx2-jsfetch==1.0 ; python_full_version >= '3.12' and sys_platform == 'emscrip
     # via httpx2
 huey==3.4.0
     # via mlflow
-identify==2.6.19
+identify==2.6.20
     # via pre-commit
 idna==3.20
     # via
