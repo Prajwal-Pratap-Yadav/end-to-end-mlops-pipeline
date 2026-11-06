@@ -370,7 +370,7 @@ skops==0.16.0
     # via mlflow
 smmap==5.0.3
     # via gitdb
-sqlalchemy==2.1.1
+sqlalchemy==2.1.7
     # via
     #   alembic
     #   mlflow
