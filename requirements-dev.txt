@@ -76,7 +76,7 @@ cryptography==50.0.1
     #   moto
 cycler==0.12.1
     # via matplotlib
-databricks-sdk==0.142.0
+databricks-sdk==0.160.0
     # via
     #   mlflow-skinny
     #   mlflow-tracing
