@@ -146,7 +146,7 @@ importlib-metadata==9.0.1
     # via mlflow-skinny
 iniconfig==2.3.0
     # via pytest
-isort==9.0.1
+isort==9.0.2
     # via churn-mlops (pyproject.toml)
 itsdangerous==2.2.0
     # via flask
