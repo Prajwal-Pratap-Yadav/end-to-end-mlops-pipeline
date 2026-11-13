@@ -106,7 +106,7 @@ services:
       start_period: 10s
 
   prometheus:
-    image: prom/prometheus:v3.5.5
+    image: prom/prometheus:v3.16.0
     restart: unless-stopped
     command:
       - --config.file=/etc/prometheus/prometheus.yml
